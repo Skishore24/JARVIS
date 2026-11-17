@@ -150,6 +150,10 @@ class TextToSpeech:
     def is_speaking(self) -> bool:
         return self.state == TTSState.SPEAKING
 
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

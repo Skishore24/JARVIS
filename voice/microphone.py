@@ -46,9 +46,9 @@ class MicrophoneConfig:
     dtype: str = "float32"
     block_duration_ms: int = 30        # ms per callback chunk
     device: Optional[int] = None       # None = system default
-    vad_energy_threshold: float = 0.01 # RMS threshold for voice activity
-    vad_min_speech_ms: int = 300       # min consecutive ms to trigger VAD
-    vad_silence_ms: int = 700          # ms of silence to end utterance
+    vad_energy_threshold: float = 0.002 # RMS threshold for voice activity (sensitive to natural room voice)
+    vad_min_speech_ms: int = 150       # min consecutive ms to trigger VAD
+    vad_silence_ms: int = 650          # ms of silence to end utterance
     buffer_duration_s: int = 30        # ring buffer size in seconds
     push_to_talk_key: Optional[str] = None  # reserved for hotkey integration
 
@@ -90,6 +90,8 @@ class Microphone:
         # VAD state
         self._vad_speech_ms_accum: float = 0.0
         self._vad_silence_ms_accum: float = 0.0
+        self._vad_onset_silence_ms: float = 0.0
+        self._ambient_noise: float = 0.0005
         self._is_voice_active = False
 
         # Callbacks
@@ -292,7 +294,7 @@ class Microphone:
 
         audio = indata.copy()
         rms = float(np.sqrt(np.mean(audio ** 2)))
-        self._current_level = min(rms * 10, 1.0)  # scale to 0-1
+        self._current_level = min(rms * 25.0, 1.0)  # scale visually 0-1
 
         chunk = AudioChunk(
             data=audio,
@@ -312,9 +314,8 @@ class Microphone:
         self._update_vad(chunk, rms)
 
     def _update_vad(self, chunk: AudioChunk, rms: float) -> None:
-        """Simple energy-based Voice Activity Detection."""
+        """Energy-based Voice Activity Detection with ambient tracking and pre-roll."""
         block_ms = self.config.block_duration_ms
-        threshold = self.config.vad_energy_threshold
 
         if self._ptt_active:
             # PTT mode: always treat as speech
@@ -328,32 +329,40 @@ class Microphone:
                         pass
             return
 
-        is_speech = rms >= threshold
+        # Adaptively track ambient noise when quiet
+        if not self._is_voice_active and rms < self.config.vad_energy_threshold * 2.0:
+            self._ambient_noise = 0.96 * self._ambient_noise + 0.04 * rms
+
+        effective_threshold = max(self.config.vad_energy_threshold, self._ambient_noise * 1.8)
+        is_speech = rms >= effective_threshold
 
         if is_speech:
             self._vad_speech_ms_accum += block_ms
-            self._vad_silence_ms_accum = 0.0
+            self._vad_onset_silence_ms = 0.0
             self._utterance_buffer.append(chunk)
 
-            if (not self._is_voice_active
-                    and self._vad_speech_ms_accum >= self.config.vad_min_speech_ms):
+            if not self._is_voice_active and self._vad_speech_ms_accum >= self.config.vad_min_speech_ms:
                 self._is_voice_active = True
-                logger.debug("VAD: speech started (rms=%.4f)", rms)
+                logger.info("VAD: speech started (rms=%.4f, threshold=%.4f)", rms, effective_threshold)
                 if self._on_vad_start:
                     try:
                         self._on_vad_start()
                     except Exception:
                         pass
         else:
-            self._vad_speech_ms_accum = 0.0
-            if self._is_voice_active:
+            if not self._is_voice_active:
+                # Brief pause before speech onset is confirmed: grace period
+                self._vad_onset_silence_ms += block_ms
+                if self._vad_onset_silence_ms > 120:
+                    self._vad_speech_ms_accum = 0.0
+                    self._utterance_buffer = self._utterance_buffer[-8:]  # keep ~240ms pre-roll
+                else:
+                    self._utterance_buffer.append(chunk)
+            else:
                 self._vad_silence_ms_accum += block_ms
-                self._utterance_buffer.append(chunk)  # include trailing silence
+                self._utterance_buffer.append(chunk)  # keep trailing silence
                 if self._vad_silence_ms_accum >= self.config.vad_silence_ms:
                     self._flush_utterance()
-            else:
-                # Still in silence, reset pre-roll
-                self._utterance_buffer = self._utterance_buffer[-5:]  # keep tiny pre-roll
 
     def _flush_utterance(self) -> None:
         """End the current utterance and fire the VAD-end callback."""
@@ -364,7 +373,8 @@ class Microphone:
         self._is_voice_active = False
         self._vad_silence_ms_accum = 0.0
         self._vad_speech_ms_accum = 0.0
-        logger.debug("VAD: utterance ended (%d chunks)", len(utterance))
+        self._vad_onset_silence_ms = 0.0
+        logger.info("VAD: utterance ended (%d chunks, approx %.2fs)", len(utterance), len(utterance) * self.config.block_duration_ms / 1000)
         if self._on_vad_end:
             try:
                 self._on_vad_end(utterance)

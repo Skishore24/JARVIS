@@ -293,5 +293,17 @@ class VoicePage(QWidget):
         if self._listening != active:
             self._toggle_listening()
 
+    def set_mic_active(self, active: bool) -> None:
+        """Update voice page mic UI without re-emitting toggle signal."""
+        self._listening = active
+        self._mic_btn.setStyleSheet(self._mic_btn_style(active))
+        self._waveform.set_active(active)
+        if active:
+            self._mic_status_lbl.setText("Listening… click to stop")
+            self._mic_status_lbl.setStyleSheet("color: #22c55e; font-size: 12px;")
+        else:
+            self._mic_status_lbl.setText("Click to start listening")
+            self._mic_status_lbl.setStyleSheet("color: #64748b; font-size: 12px;")
+
     def set_audio_levels(self, levels: list[float]) -> None:
         self._waveform.set_levels(levels)

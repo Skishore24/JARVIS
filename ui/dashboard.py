@@ -238,6 +238,14 @@ class DashboardPage(QWidget):
         self.mic_toggle.emit()
         self.waveform.set_active(checked)
 
+    def set_mic_active(self, active: bool) -> None:
+        """Update mic button state and waveform safely."""
+        self._mic_btn.blockSignals(True)
+        self._mic_btn.setChecked(active)
+        self._mic_btn.setStyleSheet(self._mic_style(active))
+        self._mic_btn.blockSignals(False)
+        self.waveform.set_active(active)
+
     # ------------------------------------------------------------------
     # Public API (called by business logic)
     # ------------------------------------------------------------------

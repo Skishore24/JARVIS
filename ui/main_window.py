@@ -74,12 +74,14 @@ class MainWindow(QMainWindow):
         self._monitor.start()
 
         try:
-            self._audio = AudioManager()
+            self._audio = AudioManager(parent=self)
             self._tts = self._audio.tts
+            self._tts.start()  # Keep TTS running for all vocal responses
         except Exception as e:
             logger.warning("Audio manager initialization note: %s", e)
             self._audio = None
             self._tts = TextToSpeech()
+            self._tts.start()
 
         self._last_was_voice: bool = False
         self._setup_female_voice()
@@ -301,6 +303,7 @@ class MainWindow(QMainWindow):
         self.voice_page.mic_toggle.connect(self._toggle_voice_listening)
         self.voice_page.ptt_pressed.connect(self._start_voice_listening)
         self.voice_page.ptt_released.connect(self._stop_voice_listening)
+        self.voice_page.wake_word_toggle.connect(self._on_wake_word_toggled)
         self.voice_page.settings_changed.connect(self._on_voice_settings_changed)
 
         # Audio manager signals
@@ -347,17 +350,27 @@ class MainWindow(QMainWindow):
         if self._audio:
             self._audio.start()
             self._set_state("LISTENING")
-            self.dashboard_page.waveform.set_active(True)
+            self.dashboard_page.set_mic_active(True)
+            self.voice_page.set_mic_active(True)
 
     def _stop_voice_listening(self) -> None:
         if self._audio:
             self._audio.stop()
             self._set_state("IDLE")
-            self.dashboard_page.waveform.set_active(False)
+            self.dashboard_page.set_mic_active(False)
+            self.voice_page.set_mic_active(False)
 
     @Slot(str)
     def _on_audio_state_changed(self, state_name: str) -> None:
-        self._set_state(state_name.upper())
+        state_u = state_name.upper()
+        self._set_state(state_u)
+        is_listening = state_u == "LISTENING"
+        self.dashboard_page.set_mic_active(is_listening)
+        self.voice_page.set_mic_active(is_listening)
+
+    def _on_wake_word_toggled(self, enabled: bool) -> None:
+        if self._audio:
+            self._audio.set_wake_word_enabled(enabled)
 
     @Slot(float)
     def _on_audio_level_changed(self, level: float) -> None:
@@ -418,15 +431,19 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _clean_for_speech(text: str) -> str:
-        """Convert markdown and technical formatting to fluent, natural spoken English."""
+        """Convert markdown, JSON, and technical formatting to fluent, natural spoken English."""
         import re
         # Omit code blocks
-        t = re.sub(r'```[\s\S]*?```', 'code block omitted', text)
+        t = re.sub(r'```[\s\S]*?```', '', text)
+        # Strip JSON-like objects
+        t = re.sub(r'\{[\s\S]*?\}', '', t)
         # Clean inline code
         t = re.sub(r'`([^`]+)`', r'\1', t)
         # Clean markdown links
         t = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', t)
-        # Remove bold / italic / bullet points / headers
+        # Remove raw brackets
+        t = re.sub(r'\[[^\[\]]*\]', '', t)
+        # Remove bold / italic / bullet points / headers / technical symbols
         t = re.sub(r'[*_~#>-]', ' ', t)
         # Normalize whitespace
         t = re.sub(r'\s+', ' ', t).strip()
@@ -461,9 +478,19 @@ class MainWindow(QMainWindow):
             if self._audio.state == AudioState.LISTENING:
                 self._audio.stop()
                 self._set_state("IDLE")
+                self.dashboard_page.set_mic_active(False)
+                self.voice_page.set_mic_active(False)
             else:
-                self._audio.start()
-                self._set_state("LISTENING")
+                success = self._audio.start()
+                if success:
+                    self._set_state("LISTENING")
+                    self.dashboard_page.set_mic_active(True)
+                    self.voice_page.set_mic_active(True)
+                else:
+                    self._set_state("ERROR")
+                    self.dashboard_page.set_mic_active(False)
+                    self.voice_page.set_mic_active(False)
+                    QTimer.singleShot(2500, lambda: self._set_state("IDLE"))
         else:
             self._set_state("LISTENING")
             QTimer.singleShot(2000, lambda: self._set_state("IDLE"))
@@ -547,5 +574,8 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         if self._audio:
-            self._audio.stop()
+            try:
+                self._audio.shutdown()
+            except Exception:
+                pass
         event.accept()

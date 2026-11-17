@@ -74,7 +74,7 @@ class AudioManagerConfig:
     stt: STTConfig = field(default_factory=lambda: STTConfig(model_size="base"))
     tts: TTSConfig = field(default_factory=TTSConfig)
     wake_word: WakeWordConfig = field(default_factory=WakeWordConfig)
-    require_wake_word: bool = True      # if False, always listen
+    require_wake_word: bool = False      # if False, listen directly to commands when mic is active
     auto_start_listening: bool = True   # re-enter LISTENING after SPEAKING
     stt_queue_size: int = 5             # max queued utterances for transcription
     mute_mic_while_speaking: bool = True  # prevents TTS echo
@@ -154,25 +154,27 @@ class AudioManager:
     # ------------------------------------------------------------------
 
     def start(self) -> bool:
-        """Start all sub-systems. Returns True if all started successfully."""
+        """Start microphone and STT pipeline. Returns True if started successfully."""
         if self._is_running:
             return True
 
         logger.info("AudioManager: starting…")
         success = True
 
-        # Load Whisper
-        if not self.stt.load():
-            logger.error("STT model failed to load")
-            success = False
+        # Load Whisper (if not already loaded)
+        if not getattr(self.stt, "_loaded", False):
+            if not self.stt.load():
+                logger.error("STT model failed to load")
+                success = False
 
         # Load wake word (optional)
         self.wake_detector.load()  # gracefully degrades to text-match
 
-        # Start TTS
-        if not self.tts.start():
-            logger.error("TTS engine failed to start")
-            success = False
+        # Start TTS if not running
+        if not self.tts.is_running:
+            if not self.tts.start():
+                logger.error("TTS engine failed to start")
+                success = False
 
         # Start microphone
         if not self.microphone.start():
@@ -191,26 +193,36 @@ class AudioManager:
         return success
 
     def stop(self) -> None:
-        """Stop all sub-systems gracefully."""
+        """Stop microphone listening gracefully (keeps TTS running for voice output)."""
         if not self._is_running:
             return
-        logger.info("AudioManager: stopping…")
+        logger.info("AudioManager: stopping listening…")
         self._is_running = False
         self._transition(AudioState.IDLE)
 
         self.microphone.stop()
-        self.tts.stop()
         self.wake_detector.unload()
-        self.stt.unload()
 
         # Unblock STT worker
         try:
             self._stt_queue.put_nowait(None)  # type: ignore[arg-type]
         except queue.Full:
             pass
-        if self._stt_thread:
-            self._stt_thread.join(timeout=5.0)
+        if self._stt_thread and self._stt_thread.is_alive():
+            self._stt_thread.join(timeout=3.0)
         logger.info("AudioManager: stopped")
+
+    def shutdown(self) -> None:
+        """Complete shutdown of all audio systems including TTS and STT."""
+        self.stop()
+        try:
+            self.tts.stop()
+        except Exception:
+            pass
+        try:
+            self.stt.unload()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Push-to-talk interface
@@ -351,49 +363,43 @@ class AudioManager:
             audio = np.concatenate(arrays).astype(np.float32)
             result = self.stt.transcribe(audio, sample_rate=self.config.microphone.sample_rate)
 
-            logger.debug("STT result: '%s' (%.2f)", result.text, result.confidence)
+            raw_text = result.text.strip()
+            logger.info("STT raw result: '%s' (confidence=%.2f)", raw_text, result.confidence)
 
-            # Notify all transcriptions
-            if self.on_transcription:
-                try:
-                    self.on_transcription(result)
-                except Exception:
-                    pass
-            try:
-                self.signals.transcription_ready.emit(result.text, result.confidence)
-            except Exception:
-                pass
+            # Filter out empty or Whisper noise hallucination bracket tokens
+            if raw_text and not (raw_text.startswith("[") and raw_text.endswith("]")):
+                command_text = raw_text
+                has_ww = self.wake_detector.check_text(raw_text) is not None
+                if has_ww:
+                    command_text = self.wake_detector.strip_wake_word(raw_text)
 
-            # Wake word check (text-match mode as fallback / always-on)
-            if not result.is_empty:
-                self._handle_transcription(result)
+                if self.config.require_wake_word and not has_ww:
+                    logger.info("Wake word required but not heard in: '%s'", raw_text)
+                else:
+                    logger.info("Transcribed speech ready: '%s' (conf=%.2f)", command_text, result.confidence)
+                    if self.on_transcription:
+                        try:
+                            self.on_transcription(result)
+                        except Exception:
+                            pass
+                    try:
+                        self.signals.transcription_ready.emit(command_text, result.confidence)
+                    except Exception:
+                        pass
+                    if self.on_command:
+                        try:
+                            self.on_command(command_text, result.confidence)
+                        except Exception:
+                            pass
 
             self._transition(AudioState.LISTENING)
 
         logger.debug("STT worker exited")
 
-    def _handle_transcription(self, result: TranscriptionResult) -> None:
-        """Route transcription through wake word gate → command callback."""
-        if not self.config.require_wake_word:
-            # No wake word required: every transcription is a command
-            if self.on_command:
-                try:
-                    self.on_command(result.text, result.confidence)
-                except Exception:
-                    pass
-            return
-
-        # Try text-match wake word detection
-        ww_result = self.wake_detector.check_text(result.text)
-        if ww_result:
-            command = self.wake_detector.strip_wake_word(result.text)
-            if command and self.on_command:
-                try:
-                    self.on_command(command, result.confidence)
-                except Exception:
-                    pass
-        else:
-            logger.debug("No wake word in: '%s'", result.text)
+    def set_wake_word_enabled(self, enabled: bool) -> None:
+        """Enable or disable requirement of wake word before commands."""
+        self.config.require_wake_word = enabled
+        logger.info("Wake word requirement set to: %s", enabled)
 
     # ------------------------------------------------------------------
     # State machine

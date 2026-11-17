@@ -137,25 +137,44 @@ class AIEngine:
         """
         Parse a JSON intent block from the AI response text.
 
-        The model is prompted to emit blocks like:
+        Supports:
             {"intent": "TOOL_NAME", "params": {...}}
-
-        Returns the parsed dict or None if no valid JSON block found.
+        as well as:
+            TOOL_NAME {"param": "val"}
         """
-        # Try to find the first {...} block
+        import re
+
+        # 1. Standard {"intent": "TOOL_NAME", ...}
         start = ai_response.find("{")
         end = ai_response.rfind("}") + 1
-        if start == -1 or end == 0:
-            return None
+        if start != -1 and end > start:
+            candidate = ai_response[start:end]
+            try:
+                parsed: dict[str, Any] = json.loads(candidate)
+                if "intent" in parsed:
+                    logger.debug("Extracted intent: %s", parsed.get("intent"))
+                    return parsed
+            except json.JSONDecodeError:
+                pass
 
-        candidate = ai_response[start:end]
-        try:
-            parsed: dict[str, Any] = json.loads(candidate)
-            if "intent" in parsed:
-                logger.debug("Extracted intent: %s", parsed.get("intent"))
-                return parsed
-        except json.JSONDecodeError:
-            logger.debug("No valid JSON intent block in response.")
+        # 2. Heuristic check: TOOL_NAME followed by optional JSON params
+        known_tools = [
+            "SYSTEM_MONITOR", "OPEN_APP", "FILE_OPERATION",
+            "WEB_SEARCH", "NOTIFY", "RUN_COMMAND"
+        ]
+        for tool in known_tools:
+            pattern = rf'\b{tool}\b(?:\s*(\{{[^{{}}]*\}}))?'
+            m = re.search(pattern, ai_response, re.IGNORECASE)
+            if m:
+                params = {}
+                if m.group(1):
+                    try:
+                        params = json.loads(m.group(1))
+                    except Exception:
+                        pass
+                logger.debug("Heuristic extracted intent: %s with params: %s", tool, params)
+                return {"intent": tool.upper(), "params": params}
+
         return None
 
     # ── Utility ───────────────────────────────────────────────────────────────

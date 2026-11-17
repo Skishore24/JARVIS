@@ -193,9 +193,16 @@ class Assistant:
         cleaned = re.sub(r'^\s*\{[^{}]*"intent"[^{}]*\}\s*', '', ai_response).strip()
         cleaned = re.sub(r'\s*\{[^{}]*"intent"[^{}]*\}\s*$', '', cleaned).strip()
         cleaned = re.sub(r'(?i)\n*\s*intent\s*:\s*[A-Z_]+\s*$', '', cleaned).strip()
+
+        # If text remains after stripping the intent JSON, return it
         if cleaned:
-            return cleaned
-        return ai_response.strip()
+            # Further strip any stray JSON brackets
+            cleaned = re.sub(r'^\s*\{[^{}]*\}\s*', '', cleaned).strip()
+            if cleaned:
+                return cleaned
+
+        # If the model only emitted a blank CHAT intent block or empty string
+        return "Hello! I am JARVIS, your AI assistant. How can I help you today?"
 
     @staticmethod
     def _is_multi_step(intent: str, params: dict[str, Any]) -> bool:
