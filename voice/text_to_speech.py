@@ -353,6 +353,20 @@ class TextToSpeech:
                 elif self.config.voice_index is not None:
                     idx = min(self.config.voice_index, len(voices) - 1)
                     self._engine.setProperty("voice", voices[idx].id)
+                else:
+                    # Default to female voice (Zira / female tag)
+                    female_voice_id = None
+                    for v in voices:
+                        name_lower = v.name.lower()
+                        id_lower = v.id.lower()
+                        gender_str = str(getattr(v, "gender", "") or "").lower()
+                        if "zira" in name_lower or "female" in gender_str or "zira" in id_lower or "hazel" in name_lower or "eva" in name_lower:
+                            female_voice_id = v.id
+                            break
+                    if not female_voice_id and len(voices) > 1:
+                        female_voice_id = voices[1].id
+                    if female_voice_id:
+                        self._engine.setProperty("voice", female_voice_id)
         except Exception as exc:
             logger.debug("apply_config error: %s", exc)
 

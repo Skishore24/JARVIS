@@ -81,6 +81,9 @@ class MainWindow(QMainWindow):
             self._audio = None
             self._tts = TextToSpeech()
 
+        self._last_was_voice: bool = False
+        self._setup_female_voice()
+
         self._active_worker: AIWorkerThread | None = None
 
         # 2. Setup User Interface
@@ -266,15 +269,45 @@ class MainWindow(QMainWindow):
                 self.showNormal()
                 self.activateWindow()
 
+    def _setup_female_voice(self) -> None:
+        """Find and activate a female Windows voice (e.g., Microsoft Zira Desktop)."""
+        try:
+            voices = self._tts.list_voices()
+            for v in voices:
+                name_l = v.get("name", "").lower()
+                id_l = v.get("id", "").lower()
+                gender_s = str(v.get("gender", "") or "").lower()
+                if "zira" in name_l or "female" in gender_s or "zira" in id_l or "eva" in name_l:
+                    self._tts.set_voice(voice_id=v.get("id"))
+                    logger.info("Female voice selected: %s", v.get("name"))
+                    return
+            if len(voices) > 1:
+                self._tts.set_voice(voice_index=1)
+                logger.info("Secondary voice selected as fallback for female voice.")
+        except Exception as e:
+            logger.warning("Could not set female voice: %s", e)
+
     def _wire_signals(self) -> None:
         """Connect UI components to assistant and automation backends."""
         # Dashboard input
-        self.dashboard_page.send_message.connect(self._handle_user_message)
+        self.dashboard_page.send_message.connect(lambda txt: self._handle_user_message(txt, is_voice=False))
         self.dashboard_page.action_triggered.connect(self._handle_quick_action)
         self.dashboard_page.mic_toggle.connect(self._toggle_voice_listening)
 
         # Chat page input
-        self.chat_page.send_message.connect(self._handle_user_message)
+        self.chat_page.send_message.connect(lambda txt: self._handle_user_message(txt, is_voice=False))
+
+        # Voice page controls
+        self.voice_page.mic_toggle.connect(self._toggle_voice_listening)
+        self.voice_page.ptt_pressed.connect(self._start_voice_listening)
+        self.voice_page.ptt_released.connect(self._stop_voice_listening)
+        self.voice_page.settings_changed.connect(self._on_voice_settings_changed)
+
+        # Audio manager signals
+        if self._audio and hasattr(self._audio, "signals"):
+            self._audio.signals.transcription_ready.connect(self._on_voice_transcription)
+            self._audio.signals.state_changed.connect(self._on_audio_state_changed)
+            self._audio.signals.audio_level_changed.connect(self._on_audio_level_changed)
 
         # Automation page triggers
         self.automation_page.action_completed.connect(
@@ -301,14 +334,52 @@ class MainWindow(QMainWindow):
         elif idx == 5:
             self.memory_page.refresh_memories()
 
-    def _handle_user_message(self, text: str) -> None:
+    @Slot(str, float)
+    def _on_voice_transcription(self, text: str, confidence: float) -> None:
+        """Handle recognized speech from microphone."""
+        text = text.strip()
+        if text:
+            logger.info("Voice input transcribed (conf=%.2f): %s", confidence, text)
+            self.voice_page.set_transcript(text)
+            self._handle_user_message(text, is_voice=True)
+
+    def _start_voice_listening(self) -> None:
+        if self._audio:
+            self._audio.start()
+            self._set_state("LISTENING")
+            self.dashboard_page.waveform.set_active(True)
+
+    def _stop_voice_listening(self) -> None:
+        if self._audio:
+            self._audio.stop()
+            self._set_state("IDLE")
+            self.dashboard_page.waveform.set_active(False)
+
+    @Slot(str)
+    def _on_audio_state_changed(self, state_name: str) -> None:
+        self._set_state(state_name.upper())
+
+    @Slot(float)
+    def _on_audio_level_changed(self, level: float) -> None:
+        self.voice_page.set_audio_levels([level] * 5)
+
+    def _on_voice_settings_changed(self, settings: dict) -> None:
+        if "speed" in settings and self._tts:
+            self._tts.set_rate(int(settings["speed"]))
+        if "volume" in settings and self._tts:
+            self._tts.set_volume(float(settings["volume"]) / 100.0)
+
+    def _handle_user_message(self, text: str, is_voice: bool = False) -> None:
         """Send message to AI via background worker."""
         if not text.strip():
             return
 
+        self._last_was_voice = is_voice
+
         # Visual state
         self._set_state("THINKING")
-        self.dashboard_page.add_activity(f"User: {text[:45]}")
+        origin_tag = "🎙️ Voice" if is_voice else "💬 User"
+        self.dashboard_page.add_activity(f"{origin_tag}: {text[:45]}")
         self.chat_page.add_user_message(text)
         self.chat_page.begin_streaming_message()
 
@@ -327,16 +398,39 @@ class MainWindow(QMainWindow):
         self.dashboard_page.add_activity(f"JARVIS: {full_response[:45]}")
         self._set_state("SPEAKING")
 
-        # Optional vocalization
+        # Vocalize response using female voice
         try:
-            # Speak first sentence or concise reply
-            clean_speech = full_response.split("\n")[0][:180]
-            if clean_speech and not clean_speech.startswith(("{", "<", "[")):
-                self._tts.speak(clean_speech)
-        except Exception:
-            pass
+            if self._last_was_voice:
+                # User asked via voice -> speak full natural response
+                speech_text = self._clean_for_speech(full_response)
+                if speech_text:
+                    logger.info("Vocalizing voice response via female voice (%d chars)", len(speech_text))
+                    self._tts.speak(speech_text)
+            else:
+                # Text input -> speak concise summary/first sentence
+                concise = self._clean_for_speech(full_response.split("\n")[0])[:140]
+                if concise and not concise.startswith(("{", "<", "[")):
+                    self._tts.speak(concise)
+        except Exception as e:
+            logger.warning("TTS speech error: %s", e)
 
         QTimer.singleShot(2500, lambda: self._set_state("IDLE"))
+
+    @staticmethod
+    def _clean_for_speech(text: str) -> str:
+        """Convert markdown and technical formatting to fluent, natural spoken English."""
+        import re
+        # Omit code blocks
+        t = re.sub(r'```[\s\S]*?```', 'code block omitted', text)
+        # Clean inline code
+        t = re.sub(r'`([^`]+)`', r'\1', t)
+        # Clean markdown links
+        t = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', t)
+        # Remove bold / italic / bullet points / headers
+        t = re.sub(r'[*_~#>-]', ' ', t)
+        # Normalize whitespace
+        t = re.sub(r'\s+', ' ', t).strip()
+        return t
 
     def _on_ai_error(self, err: str) -> None:
         self.chat_page.finish_streaming_message()

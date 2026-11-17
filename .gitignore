@@ -1,0 +1,31 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Database & Runtime data
+data/*.db
+data/*.sqlite3
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Logs
+logs/*.log
+*.log
+
+# PyInstaller / Packaging
+build/
+dist/
+*.spec.bak
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+*.swp

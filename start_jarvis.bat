@@ -13,7 +13,11 @@ if exist ".venv\Scripts\activate.bat" (
 )
 
 :: Run the application
-python main.py
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" main.py
+) else (
+    python main.py
+)
 
 if %errorlevel% neq 0 (
     echo.
