@@ -1,0 +1,53 @@
+2026-11-17 13:22:31,244 [INFO] jarvis: Starting JARVIS AI Desktop Assistant...
+2026-11-17 13:40:22,611 [INFO] jarvis: Starting JARVIS AI Desktop Assistant...
+2026-11-17 13:40:42,747 [INFO] jarvis: Starting JARVIS AI Desktop Assistant...
+2026-11-17 13:40:48,191 [INFO] memory.database: Database engine created: sqlite:///data/jarvis.db
+2026-11-17 13:40:48,199 [INFO] memory.database: Database tables initialised.
+2026-11-17 13:41:16,740 [WARNING] voice.speech_to_text: faster-whisper not available – STT will use fallback
+2026-11-17 13:41:16,752 [INFO] voice.wake_word: openwakeword not available – using text-match fallback
+2026-11-17 13:41:16,791 [INFO] core.assistant: Initialising JARVIS assistant…
+2026-11-17 13:41:16,791 [INFO] services.system_monitor: SystemMonitor initialised.
+2026-11-17 13:41:16,818 [INFO] services.notification_service: Notification service: winotify available
+2026-11-17 13:41:16,818 [INFO] core.permission_manager: PermissionManager ready — fs=True proc=True net=True sys=False
+2026-11-17 13:41:16,819 [INFO] memory.database: Database tables initialised.
+2026-11-17 13:41:16,819 [INFO] memory.memory_manager: MemoryManager initialised.
+2026-11-17 13:41:16,826 [INFO] core.ai_engine: AIEngine initialised — model=llama3.2:3b host=http://localhost:11434
+2026-11-17 13:41:16,826 [INFO] core.command_router: CommandRouter initialised with 7 handlers.
+2026-11-17 13:41:16,826 [INFO] core.execution_engine: ExecutionEngine ready — max_retries=2 timeout=300s
+2026-11-17 13:41:16,832 [INFO] memory.memory_manager: New session created: ba6f1e32-aa4b-4ccc-8593-c3717da30506
+2026-11-17 13:41:16,833 [INFO] core.assistant: JARVIS initialised — session=ba6f1e32-aa4b-4ccc-8593-c3717da30506 model=llama3.2:3b
+2026-11-17 13:41:16,833 [INFO] core.assistant: JARVIS started.
+2026-11-17 13:41:16,836 [INFO] services.system_monitor: SystemMonitor initialised.
+2026-11-17 13:41:17,336 [INFO] memory.database: Database tables initialised.
+2026-11-17 13:41:17,336 [INFO] memory.memory_manager: MemoryManager initialised.
+2026-11-17 13:41:17,344 [INFO] memory.database: Database tables initialised.
+2026-11-17 13:41:17,344 [INFO] memory.memory_manager: MemoryManager initialised.
+2026-11-17 13:41:17,536 [INFO] ui.main_window: MainWindow initialized successfully.
+2026-11-17 13:41:18,702 [INFO] jarvis: JARVIS started successfully
+2026-11-17 13:41:48,032 [INFO] voice.audio_manager: AudioManager: starting…
+2026-11-17 13:41:48,032 [ERROR] voice.speech_to_text: faster-whisper is not installed
+2026-11-17 13:41:48,033 [ERROR] voice.audio_manager: STT model failed to load
+2026-11-17 13:41:48,033 [INFO] voice.wake_word: Wake word: using text-match mode
+2026-11-17 13:41:48,033 [INFO] voice.text_to_speech: TTS engine started
+2026-11-17 13:41:48,065 [INFO] comtypes.client._code_cache: Could not import comtypes.gen, trying to create it.
+2026-11-17 13:41:48,066 [INFO] comtypes.client._code_cache: Created comtypes.gen directory: 'C:\MyFiles\Project\JARVIS\.venv\Lib\site-packages\comtypes\gen'
+2026-11-17 13:41:48,066 [INFO] comtypes.client._code_cache: Writing __init__.py file: 'C:\MyFiles\Project\JARVIS\.venv\Lib\site-packages\comtypes\gen\__init__.py'
+2026-11-17 13:41:48,068 [INFO] comtypes.client._code_cache: Using writeable comtypes cache directory: 'C:\MyFiles\Project\JARVIS\.venv\Lib\site-packages\comtypes\gen'
+2026-11-17 13:41:48,078 [INFO] comtypes.client._generate: Could not import comtypes.gen._C866CA3A_32F7_11D2_9602_00C04F8EE628_0_5_4: No module named 'comtypes.gen._C866CA3A_32F7_11D2_9602_00C04F8EE628_0_5_4'
+2026-11-17 13:41:48,082 [INFO] comtypes.client._generate: # Generating comtypes.gen._C866CA3A_32F7_11D2_9602_00C04F8EE628_0_5_4
+2026-11-17 13:41:48,101 [INFO] voice.microphone: Microphone started: 16000 Hz, 1 ch, device=default
+2026-11-17 13:41:48,101 [INFO] voice.audio_manager: AudioManager: started (state=ERROR)
+2026-11-17 13:41:48,141 [INFO] comtypes.client._generate: # Generating comtypes.gen.SpeechLib
+2026-11-17 13:41:48,146 [INFO] comtypes.client._generate: Could not import comtypes.gen._00020430_0000_0000_C000_000000000046_0_2_0: No module named 'comtypes.gen._00020430_0000_0000_C000_000000000046_0_2_0'
+2026-11-17 13:41:48,148 [INFO] comtypes.client._generate: # Generating comtypes.gen._00020430_0000_0000_C000_000000000046_0_2_0
+2026-11-17 13:41:48,153 [INFO] comtypes.client._generate: # Generating comtypes.gen.stdole
+2026-11-17 13:42:20,819 [INFO] httpx: HTTP Request: POST http://localhost:11434/api/chat "HTTP/1.1 200 OK"
+2026-11-17 13:42:27,203 [INFO] memory.memory_manager: MemoryManager closed.
+2026-11-17 13:42:27,203 [INFO] core.assistant: JARVIS stopped.
+2026-11-17 13:42:27,204 [INFO] voice.text_to_speech: TTS engine stopped
+2026-11-17 13:42:27,204 [INFO] voice.audio_manager: AudioManager: stopping…
+2026-11-17 13:42:27,441 [INFO] voice.microphone: Microphone stopped
+2026-11-17 13:42:27,441 [INFO] voice.text_to_speech: TTS engine stopped
+2026-11-17 13:42:27,441 [INFO] voice.speech_to_text: Whisper model unloaded
+2026-11-17 13:42:27,442 [INFO] voice.audio_manager: AudioManager: stopped
+2026-11-17 13:42:49,649 [INFO] jarvis: Starting JARVIS AI Desktop Assistant...

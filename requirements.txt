@@ -1,0 +1,52 @@
+# JARVIS AI Desktop Assistant - Requirements
+# Python 3.11+ required
+
+# UI Framework
+PySide6>=6.6.0
+
+# AI / LLM
+ollama>=0.4.0
+httpx>=0.27.0
+
+# Speech Recognition (STT)
+faster-whisper>=1.0.0
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.24.0
+
+# Text-to-Speech (TTS)
+pyttsx3>=2.90
+
+# Windows Automation
+pyautogui>=0.9.54
+psutil>=5.9.0
+pywin32>=306
+
+# Audio Control (Windows)
+pycaw>=20240210
+comtypes>=1.4.1
+
+# Screenshot / Screen capture
+Pillow>=10.0.0
+mss>=9.0.1
+
+# Database
+SQLAlchemy>=2.0.0
+
+# Data validation
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Windows notifications
+winotify>=1.1.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Utilities
+rich>=13.0.0
+colorlog>=6.8.0
+requests>=2.31.0
+
+# Packaging
+pyinstaller>=6.0.0
