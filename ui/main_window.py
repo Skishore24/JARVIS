@@ -566,7 +566,14 @@ class MainWindow(QMainWindow):
         """)
 
     def closeEvent(self, event) -> None:
-        """Clean shutdown."""
+        """Clean shutdown - completely terminate app and all background components."""
+        logger.info("Closing JARVIS — terminating all threads and workers...")
+        try:
+            if hasattr(self, "_tray") and self._tray:
+                self._tray.hide()
+        except Exception:
+            pass
+
         self._monitor.stop()
         self._assistant.stop()
         try:
@@ -578,4 +585,14 @@ class MainWindow(QMainWindow):
                 self._audio.shutdown()
             except Exception:
                 pass
+
+        if self._active_worker and self._active_worker.isRunning():
+            try:
+                self._active_worker.terminate()
+            except Exception:
+                pass
+
         event.accept()
+        qapp = QApplication.instance()
+        if qapp:
+            qapp.quit()

@@ -97,6 +97,7 @@ def main():
     app.setApplicationName(ASSISTANT_NAME)
     app.setApplicationVersion("1.0.0")
     app.setOrganizationName("JARVIS")
+    app.setQuitOnLastWindowClosed(True)
     
     # Set application-wide dark palette
     app.setStyle("Fusion")
