@@ -87,6 +87,7 @@ class MainWindow(QMainWindow):
         self._setup_female_voice()
 
         self._active_worker: AIWorkerThread | None = None
+        self._message_queue: list[tuple[str, bool]] = []
 
         # 2. Setup User Interface
         self._setup_ui()
@@ -387,6 +388,12 @@ class MainWindow(QMainWindow):
         if not text.strip():
             return
 
+        # If previous query is still running, queue incoming speech/text
+        if self._active_worker and self._active_worker.isRunning():
+            logger.info("AI worker busy; queued request: '%s' (is_voice=%s)", text[:30], is_voice)
+            self._message_queue.append((text, is_voice))
+            return
+
         self._last_was_voice = is_voice
 
         # Visual state
@@ -396,12 +403,14 @@ class MainWindow(QMainWindow):
         self.chat_page.add_user_message(text)
         self.chat_page.begin_streaming_message()
 
-        # Launch background AI worker
-        self._active_worker = AIWorkerThread(self._assistant, text)
-        self._active_worker.chunk_received.connect(self._on_ai_chunk)
-        self._active_worker.response_complete.connect(self._on_ai_complete)
-        self._active_worker.error_occurred.connect(self._on_ai_error)
-        self._active_worker.start()
+        # Launch background AI worker tied to MainWindow lifetime
+        worker = AIWorkerThread(self._assistant, text, parent=self)
+        self._active_worker = worker
+        worker.chunk_received.connect(self._on_ai_chunk)
+        worker.response_complete.connect(self._on_ai_complete)
+        worker.error_occurred.connect(self._on_ai_error)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
 
     def _on_ai_chunk(self, chunk: str) -> None:
         self.chat_page.append_stream_chunk(chunk)
@@ -427,7 +436,14 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.warning("TTS speech error: %s", e)
 
-        QTimer.singleShot(2500, lambda: self._set_state("IDLE"))
+        # Transition back to IDLE and process any queued messages
+        def _finish_and_next():
+            self._set_state("IDLE")
+            if self._message_queue:
+                next_text, next_is_voice = self._message_queue.pop(0)
+                self._handle_user_message(next_text, is_voice=next_is_voice)
+
+        QTimer.singleShot(2500, _finish_and_next)
 
     @staticmethod
     def _clean_for_speech(text: str) -> str:
@@ -497,12 +513,14 @@ class MainWindow(QMainWindow):
 
     def _emergency_stop(self) -> None:
         """Halt all speech, active AI tasks, and pending actions."""
+        self._message_queue.clear()
         try:
             self._tts.interrupt()
         except Exception:
             pass
         if self._active_worker and self._active_worker.isRunning():
             self._active_worker.terminate()
+            self._active_worker.wait(500)
         self._set_state("IDLE")
         self.dashboard_page.add_activity("🛑 Emergency Stop Executed")
 
@@ -589,6 +607,7 @@ class MainWindow(QMainWindow):
         if self._active_worker and self._active_worker.isRunning():
             try:
                 self._active_worker.terminate()
+                self._active_worker.wait(500)
             except Exception:
                 pass
 

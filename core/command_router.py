@@ -52,12 +52,18 @@ class CommandRouter:
         logger.debug("Registered handler for intent '%s'.", intent)
 
     def _register_default_handlers(self) -> None:
-        """Wire up all built-in tool handlers."""
+        """Wire up all built-in tool handlers with common synonyms and aliases."""
         self._handlers = {
             "SYSTEM_MONITOR": self._handle_system_monitor,
+            "SYSTEM_INFO":    self._handle_system_monitor,
             "OPEN_APP":        self._handle_open_app,
+            "LAUNCH_APP":      self._handle_open_app,
             "FILE_OPERATION":  self._handle_file_operation,
             "WEB_SEARCH":      self._handle_web_search,
+            "OPEN_SEARCH":     self._handle_web_search,
+            "SEARCH":          self._handle_web_search,
+            "SEARCH_WEB":      self._handle_web_search,
+            "GOOGLE_SEARCH":   self._handle_web_search,
             "NOTIFY":          self._handle_notify,
             "RUN_COMMAND":     self._handle_run_command,
             "CHAT":            self._handle_chat,
@@ -75,9 +81,17 @@ class CommandRouter:
         key = intent.upper()
 
         if key not in self._handlers:
-            msg = f"Unknown intent '{intent}'. I don't know how to handle that yet."
-            logger.warning(msg)
-            return msg
+            if "SEARCH" in key:
+                key = "WEB_SEARCH"
+            elif "APP" in key:
+                key = "OPEN_APP"
+            elif "FILE" in key:
+                key = "FILE_OPERATION"
+            elif "SYS" in key:
+                key = "SYSTEM_MONITOR"
+            else:
+                logger.info("Routing unfamiliar intent '%s' to general chat handler.", intent)
+                key = "CHAT"
 
         try:
             self._pm.check_or_raise(key)
@@ -220,7 +234,14 @@ class CommandRouter:
         return f"Unknown file operation '{operation}'."
 
     def _handle_web_search(self, params: dict[str, Any]) -> str:
-        query = params.get("query", "").strip()
+        query = (
+            params.get("query")
+            or params.get("search")
+            or params.get("q")
+            or params.get("term")
+            or params.get("url")
+            or ""
+        ).strip()
         if not query:
             return "Please provide a search query."
         url = f"https://www.google.com/search?q={query.replace(' ', '+')}"

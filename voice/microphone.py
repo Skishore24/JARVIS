@@ -48,7 +48,7 @@ class MicrophoneConfig:
     device: Optional[int] = None       # None = system default
     vad_energy_threshold: float = 0.002 # RMS threshold for voice activity (sensitive to natural room voice)
     vad_min_speech_ms: int = 150       # min consecutive ms to trigger VAD
-    vad_silence_ms: int = 650          # ms of silence to end utterance
+    vad_silence_ms: int = 850          # ms of silence to end utterance (allows natural pauses between words)
     buffer_duration_s: int = 30        # ring buffer size in seconds
     push_to_talk_key: Optional[str] = None  # reserved for hotkey integration
 

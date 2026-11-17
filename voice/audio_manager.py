@@ -366,8 +366,8 @@ class AudioManager:
             raw_text = result.text.strip()
             logger.info("STT raw result: '%s' (confidence=%.2f)", raw_text, result.confidence)
 
-            # Filter out empty or Whisper noise hallucination bracket tokens
-            if raw_text and not (raw_text.startswith("[") and raw_text.endswith("]")):
+            # Filter out empty, very low confidence (< 0.28), or Whisper noise hallucination bracket tokens
+            if raw_text and result.confidence >= 0.28 and not (raw_text.startswith("[") and raw_text.endswith("]")):
                 command_text = raw_text
                 has_ww = self.wake_detector.check_text(raw_text) is not None
                 if has_ww:

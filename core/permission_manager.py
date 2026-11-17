@@ -30,9 +30,15 @@ class PermissionSet:
 _TOOL_PERMISSION_MAP: dict[str, str] = {
     "FILE_OPERATION": "file_system",
     "OPEN_APP": "process_execution",
+    "LAUNCH_APP": "process_execution",
     "RUN_COMMAND": "process_execution",
     "WEB_SEARCH": "network",
+    "OPEN_SEARCH": "network",
+    "SEARCH": "network",
+    "SEARCH_WEB": "network",
+    "GOOGLE_SEARCH": "network",
     "SYSTEM_MONITOR": "network",   # may ping remote endpoints
+    "SYSTEM_INFO": "network",
     "NOTIFY": "process_execution",
     "SYSTEM_SETTINGS": "system_settings",
     "CHAT": "none",
@@ -83,9 +89,14 @@ class PermissionManager:
 
         category = _TOOL_PERMISSION_MAP.get(tool)
         if category is None:
-            # Unknown tool — deny by default and log
-            logger.warning("Unknown tool '%s' — denied by default.", tool)
-            return False
+            if "SEARCH" in tool:
+                category = "network"
+            elif "APP" in tool:
+                category = "process_execution"
+            elif "FILE" in tool:
+                category = "file_system"
+            else:
+                category = "none"
 
         if category == "none" or category is None:
             # Explicitly no permission required (e.g., CHAT)
